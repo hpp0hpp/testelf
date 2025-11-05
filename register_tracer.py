@@ -326,9 +326,9 @@ def main():
     
     # 创建追踪器
     tracer = RegisterTracer(instructions)
-    
-    # 追踪第58行的BR X3指令
-    target_line = 58
+
+    # 追踪第30行的BR X3指令
+    target_line = 30
     print(f"\n开始追踪第 {target_line} 行的指令...")
     
     try:

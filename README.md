@@ -1,195 +1,316 @@
-# ARM64 汇编寄存器依赖追踪器
+# ARM64 逆向分析工具集
 
-## 功能说明
+这是一个专业的ARM64二进制分析工具集，包含寄存器追踪和自动反混淆功能。
 
-这个工具可以从一个汇编跳转指令（如 `BR X3`）向上递归追踪寄存器的赋值链，找出所有参与给该寄存器赋值的指令，直到找到静态赋值指令（如 MOV 立即数、ADRP 等）。
+## 🎯 工具列表
 
-## 使用方法
+### 1. 寄存器依赖追踪器 (`register_tracer.py`)
 
-### 基本用法
+从一个汇编跳转指令（如 `BR X3`）向上递归追踪寄存器的赋值链，找出所有参与给该寄存器赋值的指令。
 
+**特点**:
+- ✅ 递归追踪寄存器依赖
+- ✅ 处理MOV/MOVK立即数组装
+- ✅ 生成依赖关系图
+- ✅ 支持W/X寄存器自动映射
+
+**使用**:
 ```bash
 python register_tracer.py
 ```
 
-默认会分析 `sample.txt` 文件的第58行指令。
+### 2. ARM64反混淆工具 (`arm64_deobfuscator.py`)
 
-### 自定义分析
+全自动分析ARM64 SO文件，追踪间接跳转并转换为直接跳转，实现反混淆。
 
-在 `register_tracer.py` 的 `main()` 函数中修改以下参数：
+**特点**:
+- 🚀 自动识别间接跳转 (BR/BLR)
+- 🧠 使用Unicorn模拟器获取跳转目标
+- 🔄 递归分析调用的函数（只追踪当前SO）
+- 🗺️ 完整段映射（映射所有text/data/rodata段）
+- 📚 多库支持（映射额外库提供数据段）
+- 🎯 智能过滤（自动跳过外部库调用）
+- 📝 生成详细分析报告
+- 💉 自动Patch生成清理后的SO
 
-```python
-# 修改要分析的文件名
-filename = 'your_file.txt'
+**使用**:
+```bash
+python arm64_deobfuscator.py <SO文件> <偏移地址>
 
-# 修改要分析的行号
-target_line = 58
+# 基本示例
+python arm64_deobfuscator.py libnative.so 0x2DA014
+
+# 映射额外的库（处理跨库引用）
+python arm64_deobfuscator.py app.so 0x1000 --libs libc.so libm.so
 ```
 
-## 核心功能
+## 📦 快速开始
 
-### 1. 指令解析
+### 安装依赖
 
-- 解析 ARM64 汇编指令格式
-- 识别指令的操作码和操作数
-- 提取目标寄存器和源寄存器
+```bash
+pip install -r requirements.txt
+```
 
-### 2. 寄存器追踪
+需要的库：
+- `capstone` - ARM64反汇编
+- `keystone-engine` - ARM64汇编
+- `unicorn` - CPU模拟器
+- `pyelftools` - ELF文件解析
 
-算法会向上递归追踪以下类型的寄存器依赖：
+### 示例1: 寄存器追踪
 
-#### 完全静态指令（追踪终止）
-- `MOV Xn, #立即数` - 将立即数加载到寄存器
-- `ADRP Xn, #地址` - 加载页地址
-- `ADR Xn, #地址` - 加载地址
+```bash
+# 分析sample.txt中的BR X3指令
+python register_tracer.py
+```
 
-#### 部分静态指令（继续追踪）
-- `MOVK Xn, #立即数` - 修改寄存器的部分位，需要追踪该寄存器之前的 MOV 指令
-- `ADD Xn, Xm, Xp` - 寄存器相加，需要追踪 Xm 和 Xp
-- `LDR Xn, [Xm, Xp]` - 从内存加载，需要追踪地址相关的寄存器
-- `CSEL Xn, Xm, Xp, 条件` - 条件选择，需要追踪 Xm 和 Xp
+输出：
+- 找到16条相关指令
+- 显示寄存器依赖关系
+- 打印完整的指令列表
 
-### 3. 输出结果
+### 示例2: SO文件反混淆
 
-程序会输出：
+```bash
+# 反混淆SO文件
+python arm64_deobfuscator.py app.so 0x1000
 
-1. **追踪起始指令**：显示从哪条指令开始分析
-2. **相关指令列表**：按行号排序的所有相关指令
-3. **每条指令的详细信息**：
-   - 目标寄存器（被赋值的寄存器）
-   - 源寄存器（参与计算的寄存器）
-   - 是否为静态赋值
-4. **寄存器依赖关系图**：直观显示寄存器之间的依赖关系
+# 输出文件:
+# - app_patched.so (Patch后的SO)
+# - app_report.txt (详细报告)
+```
 
-## 示例输出
+## 📖 文档
+
+- **[快速开始指南](quick_start.md)** - 5分钟快速上手
+- **[反混淆工具详细文档](DEOBFUSCATOR_README.md)** - 完整功能说明和高级用法
+- **[内存映射指南](MEMORY_MAPPING_GUIDE.md)** - ⭐ 新功能：完整段映射和多库支持
+- **[输出示例说明](EXAMPLE_OUTPUT.md)** - ⭐ 查看实际运行输出和说明
+- **[测试脚本](test_deobfuscator.py)** - 交互式测试和演示
+
+## 🎓 典型应用场景
+
+### 场景1: 分析控制流混淆
+
+sample.txt展示了一个典型的间接跳转混淆：
+
+```asm
+第58行: BR X3              # 间接跳转
+第42行: ADD X3, X1, X24    # X3由多个寄存器计算
+第34行: LDR X1, [X9,X13]   # 依赖其他寄存器
+...共16条相关指令
+```
+
+使用寄存器追踪器分析：
+```bash
+python register_tracer.py
+```
+
+### 场景2: 批量反混淆SO文件
+
+```bash
+# 1. 在IDA中找到混淆函数的偏移地址
+# 2. 运行反混淆工具
+python arm64_deobfuscator.py obfuscated.so 0x2DA014 --max-depth 5
+
+# 3. 查看生成的报告
+cat obfuscated_report.txt
+
+# 4. 在IDA中加载patch后的文件进行进一步分析
+ida64 obfuscated_patched.so
+```
+
+## 🔧 核心算法
+
+### 寄存器追踪算法
+
+1. **识别目标寄存器**: 从跳转指令提取寄存器（如 BR X3 → X3）
+2. **向上扫描**: 在指令流中向上查找所有修改该寄存器的指令
+3. **递归追踪**: 对每个源寄存器递归执行步骤1-2
+4. **停止条件**: 遇到立即数赋值（MOV/ADRP等）或MOVK序列的起始MOV
+5. **输出结果**: 按地址排序输出所有相关指令
+
+### 反混淆算法
+
+1. **反汇编函数**: 使用Capstone反汇编指定函数到RET指令
+2. **识别间接跳转**: 找出所有BR/BLR指令
+3. **追踪依赖**: 使用寄存器追踪算法找到所有相关指令
+4. **模拟执行**: 用Unicorn模拟器执行相关指令，获取寄存器值
+5. **生成Patch**: 用Keystone将间接跳转重新汇编为直接跳转
+6. **递归分析**: 对BL/BLR调用的函数递归执行步骤1-5
+7. **应用Patch**: 将新指令写入SO文件
+
+## 📊 示例输出
+
+### 寄存器追踪输出
 
 ```
-追踪起始指令（第58行）:
-  .text:00000000002DA0F4                 BR              X3
-
-相关指令追踪结果（共16条）:
+涉及到的所有指令（共16条）:
 ================================================================================
 
-第42行: .text:00000000002DA0B4                 ADD             X3, X1, X24
-  目标寄存器: X3
-  源寄存器: {'X1', 'X24'}
-  静态赋值: 否
-
-第34行: .text:00000000002DA094                 LDR             X1, [X9,X13]
-  目标寄存器: X1
-  源寄存器: {'X13', 'X9'}
-  静态赋值: 否
-
-...
+ 1. 第 16行: ADRP     X11, #off_6784C0@PAGE
+ 2. 第 17行: MOV      X12, #0xAE9E
+ 3. 第 19行: MOVK     X12, #0x2599,LSL#16
+ ...
+16. 第 42行: ADD      X3, X1, X24
 
 寄存器依赖关系:
 ================================================================================
 X3 ← {'X1', 'X24'} (第42行)
-X1 ← {'X13', 'X9'} (第34行)
+X1 ← {'X9', 'X13'} (第34行)
 X9 ← {'X11'} (第24行)
 ...
 ```
 
-## 算法特点
-
-### 1. 递归追踪
-- 从目标寄存器开始，递归追踪所有依赖的源寄存器
-- 处理多层依赖关系（如 X3 依赖 X1，X1 依赖 X9）
-
-### 2. 避免重复
-- 使用 `(寄存器, 起始行号)` 对来避免重复追踪
-- 支持同一寄存器在不同位置的多次赋值
-
-### 3. 立即数组装处理
-- 正确处理 ARM64 的 64位立即数组装模式
-- 追踪 MOV + 多个 MOVK 的完整序列
-
-### 4. 寄存器映射
-- 自动处理 W 寄存器和 X 寄存器的映射关系
-- W0 到 W30 自动映射到 X0 到 X30
-
-## 技术细节
-
-### 支持的指令类型
-
-#### 数据传输指令
-- `MOV`, `MOVK`, `MOVZ`, `MOVN` - 数据移动
-- `LDR`, `LDUR` - 加载
-- `STR`, `STUR`, `STP` - 存储
-
-#### 算术/逻辑指令
-- `ADD`, `SUB` - 加减运算
-- `AND`, `ORR`, `EOR` - 位运算
-
-#### 分支指令
-- `BR`, `BLR` - 寄存器跳转
-- `B`, `BL` - 直接跳转
-
-#### 条件指令
-- `CSEL`, `CSINC`, `CSINV` - 条件选择
-- `CMP`, `CMN`, `TST` - 比较测试
-
-### 寄存器标准化
-- X0-X30: 64位通用寄存器
-- W0-W30: 32位通用寄存器（对应X寄存器的低32位）
-- XZR/WZR: 零寄存器
-- SP: 栈指针
-- 系统寄存器: TPIDR_EL0 等（不追踪）
-
-## 扩展用途
-
-这个工具可以用于：
-
-1. **混淆代码分析**：追踪经过混淆的跳转目标
-2. **漏洞研究**：分析控制流劫持点
-3. **逆向工程**：理解复杂的寄存器操作链
-4. **代码审计**：检查间接跳转的来源
-
-## 限制和注意事项
-
-1. **内存访问**：LDR 指令的追踪只到地址寄存器，不追踪内存中的实际值
-2. **条件执行**：不考虑指令是否真正执行（条件标志）
-3. **循环依赖**：如果存在循环依赖（如 `ADD X9, X9, X12`），只追踪到首次定义
-4. **函数调用**：不跨越函数调用边界追踪参数传递
-
-## 文件结构
+### 反混淆输出
 
 ```
-register_tracer.py    # 主程序
-sample.txt            # 示例汇编代码
-README.md             # 本说明文档
+[*] 加载SO: libnative.so
+[*] 文件大小: 1048576 字节
+[*] 反汇编函数: 0x2da014
+[!] 发现间接跳转: 0x2da0f4 - br x3
+[*] 找到 16 条相关指令
+[*] 模拟执行获取 x3 的值...
+[+] x3 = 0x2da120
+[+] Patch: 0x2da0f4: br x3 -> b #0x2da120
+[+] 共生成 8 个patch
+[+] Patch后的文件已保存: libnative_patched.so
 ```
 
-## 类和方法说明
+## 🛠️ 高级选项
 
-### `Instruction` 类
-存储单条指令的信息：
-- `line_num`: 行号
-- `address`: 指令地址
-- `opcode`: 操作码
-- `operands`: 操作数
-- `full_line`: 完整的原始行
+### 反混淆工具参数
 
-### `RegisterTracer` 类
+```bash
+python arm64_deobfuscator.py <SO文件> <偏移> [选项]
 
-#### 核心方法
-- `trace_register(target_reg, start_line)`: 递归追踪寄存器
-- `trace_from_instruction(line_num)`: 从指定行开始追踪
-- `get_destination_register(inst)`: 获取目标寄存器
-- `get_source_registers(inst)`: 获取源寄存器
-- `is_static_assignment(inst)`: 判断是否为静态赋值
-- `is_initial_value_instruction(inst)`: 判断是否为初始赋值
+选项:
+  --end END           指定函数结束地址
+  -o, --output FILE   输出文件路径
+  -r, --report FILE   报告文件路径
+  --max-depth N       最大递归深度 (默认: 3)
+```
 
-#### 辅助方法
-- `parse_instruction_line(line, line_num)`: 解析指令行
-- `normalize_register(reg)`: 标准化寄存器名
-- `extract_registers_from_operand(operand)`: 从操作数提取寄存器
-- `print_trace_result(start_inst)`: 打印追踪结果
+### 完整参数
 
-## 依赖
+```bash
+python arm64_deobfuscator.py <SO文件> <偏移> [选项]
 
-- Python 3.6+
-- 标准库：`re`, `typing`, `dataclasses`
+选项:
+  --libs, -l LIB1 LIB2 ...  额外的库文件（用于提供数据段）
+  --end END                  函数结束地址
+  -o, --output FILE          输出文件路径  
+  -r, --report FILE          报告文件路径
+  --max-depth N              最大递归深度 (默认: 3)
+```
 
-无需额外安装第三方库。
+### 使用示例
 
+```bash
+# 指定函数范围
+python arm64_deobfuscator.py lib.so 0x1000 --end 0x2000
+
+# 映射额外库（当代码读取外部库数据时）
+python arm64_deobfuscator.py app.so 0x1000 --libs libc.so libm.so
+
+# 深度递归分析（只分析当前SO内的函数）
+python arm64_deobfuscator.py lib.so 0x1000 --max-depth 5
+
+# 完整命令
+python arm64_deobfuscator.py app.so 0x2DA014 \
+    --libs /system/lib64/libc.so \
+    --max-depth 4 \
+    -o patched.so \
+    -r report.txt
+```
+
+## ⚠️ 注意事项
+
+### 限制
+
+1. **模拟器限制**: 某些系统调用或依赖外部数据的指令可能无法模拟
+2. **跳转范围**: ARM64 B指令跳转范围为±128MB，超出范围无法patch
+3. **递归深度**: 过深的递归会导致分析时间过长
+4. **条件跳转**: 当前版本主要处理无条件间接跳转
+
+### 建议
+
+- ✅ 先用IDA分析代码结构
+- ✅ 从单个函数开始测试
+- ✅ 备份原始SO文件
+- ✅ 验证patch后的代码逻辑
+
+## 🤝 使用流程
+
+### 完整工作流
+
+```bash
+# 1. 在IDA中找到混淆函数
+# 记录偏移地址，例如 0x2DA014
+
+# 2. 运行反混淆工具
+python arm64_deobfuscator.py target.so 0x2DA014 --max-depth 4
+
+# 3. 查看分析报告
+cat target_report.txt
+
+# 4. 加载patch后的SO到IDA
+# File -> Open -> target_patched.so
+
+# 5. 对比分析
+# 使用BinDiff或手动对比原文件和新文件
+```
+
+## 📚 技术栈
+
+- **Capstone**: ARM64反汇编引擎
+- **Keystone**: ARM64汇编引擎
+- **Unicorn**: 基于QEMU的CPU模拟器
+- **pyelftools**: ELF文件格式解析
+
+## 🎯 适用场景
+
+- ✅ 控制流平坦化混淆分析
+- ✅ 虚拟化保护分析
+- ✅ 间接跳转目标定位
+- ✅ 函数调用链追踪
+- ✅ 二进制代码清理
+
+## 📄 许可证
+
+仅供学习和研究使用。
+
+## 🔗 相关资源
+
+- [ARM64指令集手册](https://developer.arm.com/documentation/)
+- [Capstone官方文档](https://www.capstone-engine.org/)
+- [Unicorn官方文档](https://www.unicorn-engine.org/)
+
+## 🐛 故障排查
+
+### 常见问题
+
+**Q: 安装依赖失败？**
+```bash
+# 尝试逐个安装
+pip install capstone
+pip install keystone-engine
+pip install unicorn
+pip install pyelftools
+```
+
+**Q: 模拟执行失败？**
+- 检查相关指令是否依赖外部数据
+- 查看是否包含系统调用
+- 尝试降低递归深度
+
+**Q: 没有生成patch？**
+- 查看报告中的目标地址是否为"未知"
+- 检查跳转目标是否超出范围
+
+更多帮助请查看 [DEOBFUSCATOR_README.md](DEOBFUSCATOR_README.md)
+
+---
+
+⭐ 如果这个工具对你有帮助，欢迎Star！

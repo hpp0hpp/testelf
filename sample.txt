@@ -1,58 +1,30 @@
-.text:00000000002DA014 ; __unwind { // __gxx_personality_v0
-.text:00000000002DA014                 SUB             SP, SP, #0xD0
-.text:00000000002DA018                 STP             X29, X30, [SP,#0x70+var_s0]
-.text:00000000002DA01C                 STP             X28, X27, [SP,#0x70+var_s10]
-.text:00000000002DA020                 STP             X26, X25, [SP,#0x70+var_s20]
-.text:00000000002DA024                 STP             X24, X23, [SP,#0x70+var_s30]
-.text:00000000002DA028                 STP             X22, X21, [SP,#0x70+var_s40]
-.text:00000000002DA02C                 STP             X20, X19, [SP,#0x70+var_s50]
-.text:00000000002DA030                 ADD             X29, SP, #0x70
-.text:00000000002DA034                 STR             X8, [SP,#0x70+var_68]
-.text:00000000002DA038                 MRS             X9, TPIDR_EL0
-.text:00000000002DA03C                 STP             X9, X1, [SP,#0x70+var_60]
-.text:00000000002DA040                 MOV             W10, #0xBEEF
-.text:00000000002DA044                 LDR             X9, [X9,#0x28]
-.text:00000000002DA048                 MOVK            W10, #0xDEAD,LSL#16
-.text:00000000002DA04C                 ADRP            X11, #off_6784C0@PAGE
-.text:00000000002DA050                 MOV             X12, #0xAE9E
-.text:00000000002DA054                 MOV             W8, WZR
-.text:00000000002DA058                 MOVK            X12, #0x2599,LSL#16
-.text:00000000002DA05C                 STUR            X9, [X29,#var_8]
-.text:00000000002DA060                 CMP             W8, #4
-.text:00000000002DA064                 STR             W10, [SP,#0x70+var_48]
-.text:00000000002DA068                 MOV             W10, #0x78 ; 'x'
-.text:00000000002DA06C                 LDR             X9, [X11,#off_6784C0@PAGEOFF]
-.text:00000000002DA070                 MOV             W11, #0x48 ; 'H'
-.text:00000000002DA074                 MOVK            X12, #0xBC9B,LSL#32
-.text:00000000002DA078                 CSEL            X13, X11, X10, LT
-.text:00000000002DA07C                 MOVK            X12, #0x4A5A,LSL#48
-.text:00000000002DA080                 MOV             X24, #0xE007
-.text:00000000002DA084                 ADD             X9, X9, X12
-.text:00000000002DA088                 MOVK            X24, #0xCC4E,LSL#16
-.text:00000000002DA08C                 MOVK            X24, #0x3F17,LSL#32
-.text:00000000002DA090                 MOV             W10, #0x8660
-.text:00000000002DA094                 LDR             X1, [X9,X13]
-.text:00000000002DA098                 MOVK            X24, #0x5387,LSL#48
-.text:00000000002DA09C                 MOV             W11, #0x620
-.text:00000000002DA0A0                 MOV             W12, #0xB
-.text:00000000002DA0A4                 MOV             W13, #0xCD60
-.text:00000000002DA0A8                 MOV             W14, #0x5371
-.text:00000000002DA0AC                 MOV             W15, #0x1CA0
-.text:00000000002DA0B0                 MOV             W16, #0xE340
-.text:00000000002DA0B4                 ADD             X3, X1, X24
-.text:00000000002DA0B8                 MOV             W17, #0xAC8E
-.text:00000000002DA0BC                 MOV             W0, #0x3281
-.text:00000000002DA0C0                 MOV             W1, #0xF9C0
-.text:00000000002DA0C4                 MOV             W2, #0x7980
-.text:00000000002DA0C8                 MOVK            W10, #0xFFF7,LSL#16
-.text:00000000002DA0CC                 MOVK            W11, #0xF2ED,LSL#16
-.text:00000000002DA0D0                 MOVK            W12, #0xE245,LSL#16
-.text:00000000002DA0D4                 MOVK            W13, #0xCE7B,LSL#16
-.text:00000000002DA0D8                 MOVK            W14, #0xA8AB,LSL#16
-.text:00000000002DA0DC                 MOVK            W15, #0xA5D9,LSL#16
-.text:00000000002DA0E0                 MOVK            W16, #0x5A26,LSL#16
-.text:00000000002DA0E4                 MOVK            W17, #0x5754,LSL#16
-.text:00000000002DA0E8                 MOVK            W0, #0x3184,LSL#16
-.text:00000000002DA0EC                 MOVK            W1, #0xD12,LSL#16
-.text:00000000002DA0F0                 MOVK            W2, #8,LSL#16
-.text:00000000002DA0F4                 BR              X3
+.text:00000000002D967C                 SUB             SP, SP, #0x180 ; X1 明文
+.text:00000000002D9680                 STP             X29, X30, [SP,#0x120+var_s0]
+.text:00000000002D9684                 STP             X28, X27, [SP,#0x120+var_s10]
+.text:00000000002D9688                 STP             X26, X25, [SP,#0x120+var_s20]
+.text:00000000002D968C                 STP             X24, X23, [SP,#0x120+var_s30]
+.text:00000000002D9690                 STP             X22, X21, [SP,#0x120+var_s40]
+.text:00000000002D9694                 STP             X20, X19, [SP,#0x120+var_s50]
+.text:00000000002D9698                 ADD             X29, SP, #0x120
+.text:00000000002D969C                 STR             X3, [SP,#0x18]
+.text:00000000002D96A0                 MOV             X9, #0x5AC5
+.text:00000000002D96A4                 STR             X8, [SP,#0x120+var_118]
+.text:00000000002D96A8                 MRS             X8, TPIDR_EL0
+.text:00000000002D96AC                 STP             X2, X8, [SP,#0x120+var_F8]
+.text:00000000002D96B0                 ADRP            X26, #off_6784B0@PAGE
+.text:00000000002D96B4                 LDR             X8, [X8,#0x28]
+.text:00000000002D96B8                 MOVK            X9, #0xDD18,LSL#16
+.text:00000000002D96BC                 MOVK            X9, #0xB02B,LSL#32
+.text:00000000002D96C0                 MOV             X22, #0x31C3
+.text:00000000002D96C4                 MOVK            X9, #0x5281,LSL#48
+.text:00000000002D96C8                 MOVK            X22, #0xFEA2,LSL#16
+.text:00000000002D96CC                 STUR            X8, [X29,#var_10]
+.text:00000000002D96D0                 MOVK            X22, #0x9DAE,LSL#32
+.text:00000000002D96D4                 LDR             X8, [X26,#off_6784B0@PAGEOFF]
+.text:00000000002D96D8                 MOVK            X22, #0xB73E,LSL#48
+.text:00000000002D96DC                 STR             X0, [SP,#0x120+var_100]
+.text:00000000002D96E0                 LDR             X8, [X8,X9]
+.text:00000000002D96E4                 STR             X1, [SP,#0x120+var_110]
+.text:00000000002D96E8                 ADD             X9, X8, X22
+.text:00000000002D96EC                 SUB             X8, X29, #-var_48
+.text:00000000002D96F0                 BLR             X9 
