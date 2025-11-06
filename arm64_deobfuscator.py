@@ -579,176 +579,6 @@ class ARM64Analyzer:
         
         return csel_info
     
-    def emulate_with_condition_branches(self, instructions: List[Tuple[int, CsInsn]],
-                                       jump_insn_idx: int,
-                                       related_addresses: List[int],
-                                       csel_info: List[Tuple[int, str]]) -> Dict[str, any]:
-        """
-        处理包含条件选择指令的模拟，运行两次获取两个可能的目标
-        通过patch CSEL指令来强制选择不同的分支
-        
-        Args:
-            instructions: 所有指令
-            jump_insn_idx: 跳转指令索引
-            related_addresses: 相关指令地址
-            csel_info: [(地址, 条件码)] CSEL指令信息列表
-            
-        Returns:
-            {'true': 条件为真时的目标, 'false': 条件为假时的目标, 'default': 默认目标, 'condition': 条件码}
-        """
-        jump_addr, jump_insn = instructions[jump_insn_idx]
-        target_reg = self.get_jump_register(jump_insn)
-        
-        # 提取条件码（使用第一个CSEL指令的条件）
-        condition_code = csel_info[0][1] if csel_info else 'unknown'
-        
-        if not target_reg:
-            return {'default': None, 'true': None, 'false': None, 'condition': condition_code}
-        
-        results = {}
-        insn_dict = {addr: insn for addr, insn in instructions}
-        
-        # 模拟两次：一次强制条件为真，一次强制条件为假
-        for condition_state in ['true', 'false']:
-            try:
-                print(f"  [*] 模拟执行（条件={condition_state}）...")
-                
-                # 创建模拟器（传入hook配置）
-                mu = self.create_emulator(instructions, related_addresses, self.enable_mem_trace)
-                
-                # Patch所有CSEL指令，强制选择特定操作数
-                for csel_addr, csel_cond in csel_info:
-                    if csel_addr in insn_dict:
-                        csel_insn = insn_dict[csel_addr]
-                        # CSEL格式: CSEL Xd, Xn, Xm, cond
-                        # 当条件为真时选择Xn，为假时选择Xm
-                        # 我们将其替换为 MOV Xd, Xn (条件为真) 或 MOV Xd, Xm (条件为假)
-                        
-                        if len(csel_insn.operands) >= 3:
-                            dest_reg = csel_insn.reg_name(csel_insn.operands[0].reg)
-                            true_reg = csel_insn.reg_name(csel_insn.operands[1].reg)
-                            false_reg = csel_insn.reg_name(csel_insn.operands[2].reg)
-                            
-                            # 根据condition_state选择源寄存器
-                            src_reg = true_reg if condition_state == 'true' else false_reg
-                            
-                            # 生成MOV指令
-                            try:
-                                mov_code = f"mov {dest_reg}, {src_reg}"
-                                encoding, count = self.ks.asm(mov_code, csel_addr)
-                                if encoding and len(encoding) == 4:
-                                    emu_addr = self.load_address + (csel_addr - self.base_address)
-                                    mu.mem_write(emu_addr, bytes(encoding))
-                                    print(f"    [Patch CSEL] 0x{csel_addr:x}: {csel_insn.mnemonic} → mov {dest_reg}, {src_reg}")
-                            except Exception as e:
-                                print(f"    [-] Patch CSEL失败 0x{csel_addr:x}: {e}")
-                
-                # 依次执行相关指令
-                for addr in related_addresses:
-                    try:
-                        emu_addr = self.load_address + (addr - self.base_address)
-                        mu.emu_start(emu_addr, emu_addr + 4, count=1)
-                    except Exception as e:
-                        # 某些指令可能无法模拟，继续
-                        pass
-                
-                # 读取目标寄存器的值
-                reg_map = {
-                    'x0': UC_ARM64_REG_X0, 'x1': UC_ARM64_REG_X1, 'x2': UC_ARM64_REG_X2,
-                    'x3': UC_ARM64_REG_X3, 'x4': UC_ARM64_REG_X4, 'x5': UC_ARM64_REG_X5,
-                    'x6': UC_ARM64_REG_X6, 'x7': UC_ARM64_REG_X7, 'x8': UC_ARM64_REG_X8,
-                    'x9': UC_ARM64_REG_X9, 'x10': UC_ARM64_REG_X10, 'x11': UC_ARM64_REG_X11,
-                    'x12': UC_ARM64_REG_X12, 'x13': UC_ARM64_REG_X13, 'x14': UC_ARM64_REG_X14,
-                    'x15': UC_ARM64_REG_X15, 'x16': UC_ARM64_REG_X16, 'x17': UC_ARM64_REG_X17,
-                    'x18': UC_ARM64_REG_X18, 'x19': UC_ARM64_REG_X19, 'x20': UC_ARM64_REG_X20,
-                    'x21': UC_ARM64_REG_X21, 'x22': UC_ARM64_REG_X22, 'x23': UC_ARM64_REG_X23,
-                    'x24': UC_ARM64_REG_X24, 'x25': UC_ARM64_REG_X25, 'x26': UC_ARM64_REG_X26,
-                    'x27': UC_ARM64_REG_X27, 'x28': UC_ARM64_REG_X28, 'x29': UC_ARM64_REG_X29,
-                    'x30': UC_ARM64_REG_X30,
-                }
-                
-                target_reg_lower = target_reg.lower()
-                if target_reg_lower in reg_map:
-                    target_value = mu.reg_read(reg_map[target_reg_lower])
-                    print(f"  [+] {target_reg}(条件={condition_state}) = 0x{target_value:x}")
-                    results[condition_state] = target_value
-                else:
-                    results[condition_state] = None
-                    
-            except Exception as e:
-                print(f"  [-] 模拟执行失败（条件={condition_state}）: {e}")
-                results[condition_state] = None
-        
-        # 如果两个结果相同，只设置default
-        if results.get('true') == results.get('false'):
-            return {'default': results.get('true'), 'true': None, 'false': None, 'condition': condition_code}
-        
-        return {'default': None, 'true': results.get('true'), 'false': results.get('false'), 'condition': condition_code}
-    
-    def emulate_and_get_jump_target(self, instructions: List[Tuple[int, CsInsn]], 
-                                    jump_insn_idx: int,
-                                    related_addresses: List[int]) -> Optional[int]:
-        """
-        模拟执行并获取跳转目标（无条件分支）
-        
-        Args:
-            instructions: 所有指令
-            jump_insn_idx: 跳转指令索引
-            related_addresses: 相关指令地址
-            
-        Returns:
-            跳转目标地址，如果失败返回None
-        """
-        try:
-            jump_addr, jump_insn = instructions[jump_insn_idx]
-            target_reg = self.get_jump_register(jump_insn)
-            
-            if not target_reg:
-                return None
-            
-            print(f"[*] 模拟执行获取 {target_reg} 的值...")
-            
-            # 创建模拟器（传入hook配置）
-            mu = self.create_emulator(instructions, related_addresses, self.enable_mem_trace)
-            
-            # 依次执行相关指令
-            for addr in related_addresses:
-                try:
-                    emu_addr = self.load_address + (addr - self.base_address)
-                    # 执行单条指令
-                    mu.emu_start(emu_addr, emu_addr + 4, count=1)
-                except Exception as e:
-                    # 某些指令可能无法模拟，跳过
-                    pass
-            
-            # 读取目标寄存器的值
-            reg_map = {
-                'x0': UC_ARM64_REG_X0, 'x1': UC_ARM64_REG_X1, 'x2': UC_ARM64_REG_X2,
-                'x3': UC_ARM64_REG_X3, 'x4': UC_ARM64_REG_X4, 'x5': UC_ARM64_REG_X5,
-                'x6': UC_ARM64_REG_X6, 'x7': UC_ARM64_REG_X7, 'x8': UC_ARM64_REG_X8,
-                'x9': UC_ARM64_REG_X9, 'x10': UC_ARM64_REG_X10, 'x11': UC_ARM64_REG_X11,
-                'x12': UC_ARM64_REG_X12, 'x13': UC_ARM64_REG_X13, 'x14': UC_ARM64_REG_X14,
-                'x15': UC_ARM64_REG_X15, 'x16': UC_ARM64_REG_X16, 'x17': UC_ARM64_REG_X17,
-                'x18': UC_ARM64_REG_X18, 'x19': UC_ARM64_REG_X19, 'x20': UC_ARM64_REG_X20,
-                'x21': UC_ARM64_REG_X21, 'x22': UC_ARM64_REG_X22, 'x23': UC_ARM64_REG_X23,
-                'x24': UC_ARM64_REG_X24, 'x25': UC_ARM64_REG_X25, 'x26': UC_ARM64_REG_X26,
-                'x27': UC_ARM64_REG_X27, 'x28': UC_ARM64_REG_X28, 'x29': UC_ARM64_REG_X29,
-                'x30': UC_ARM64_REG_X30,
-            }
-            
-            target_reg_lower = target_reg.lower()
-            if target_reg_lower in reg_map:
-                target_value = mu.reg_read(reg_map[target_reg_lower])
-                print(f"[+] {target_reg} = 0x{target_value:x}")
-                return target_value
-            
-        except Exception as e:
-            print(f"[-] 模拟执行失败: {e}")
-            import traceback
-            traceback.print_exc()
-        
-        return None
-    
     def analyze_function(self, start_offset: int, end_offset: Optional[int] = None,
                         recursion_depth: int = 0, max_depth: int = 3) -> FunctionInfo:
         """
@@ -782,106 +612,252 @@ class ARM64Analyzer:
             name=f"sub_{start_addr:x}"
         )
         
-        # 分析每条指令
+        # ========== 第一阶段：收集所有间接跳转信息 ==========
+        print(f"{indent}[*] 第一阶段：收集间接跳转...")
+        jump_info_list = []  # [(idx, addr, insn, target_reg, related_addrs, csel_info)]
+        all_related_addrs = set()
+        
         for idx, (addr, insn) in enumerate(instructions):
             # 检查间接跳转
             if self.is_indirect_jump(insn):
-                print(f"\n{indent}[!] 发现间接跳转: 0x{addr:x} - {insn.mnemonic} {insn.op_str}")
+                print(f"{indent}[!] 发现间接跳转: 0x{addr:x} - {insn.mnemonic} {insn.op_str}")
                 
                 target_reg = self.get_jump_register(insn)
                 if target_reg:
-                    # 追踪寄存器依赖（启用debug查看详细过程）
-                    print(f"{indent}[*] 开始追踪寄存器 {target_reg} 的依赖...")
-                    related_addrs = self.trace_register_dependencies(instructions, idx, target_reg, debug=True)
-                    print(f"{indent}[*] 找到 {len(related_addrs)} 条相关指令")
+                    # 追踪寄存器依赖
+                    related_addrs = self.trace_register_dependencies(instructions, idx, target_reg, debug=False)
+                    print(f"{indent}    → {len(related_addrs)} 条相关指令")
                     
                     # 检查是否有条件选择指令
-                    csel_addrs = self.find_csel_instructions(related_addrs, instructions)
+                    csel_info = self.find_csel_instructions(related_addrs, instructions)
                     
-                    if csel_addrs:
-                        # 有CSEL指令，需要模拟两次
-                        print(f"{indent}[*] 发现 {len(csel_addrs)} 条条件选择指令，将模拟两次")
-                        targets = self.emulate_with_condition_branches(instructions, idx, related_addrs, csel_addrs)
+                    jump_info_list.append({
+                        'idx': idx,
+                        'addr': addr,
+                        'insn': insn,
+                        'target_reg': target_reg,
+                        'related_addrs': related_addrs,
+                        'csel_info': csel_info
+                    })
+                    
+                    # 汇总所有相关指令
+                    all_related_addrs.update(related_addrs)
+        
+        if not jump_info_list:
+            print(f"{indent}[*] 没有发现间接跳转")
+            self.functions[start_addr] = func_info
+            return func_info
+        
+        print(f"{indent}[*] 共发现 {len(jump_info_list)} 个间接跳转")
+        print(f"{indent}[*] 汇总后共 {len(all_related_addrs)} 条相关指令（去重后）")
+        
+        # ========== 第二阶段：统一模拟执行 ==========
+        print(f"{indent}[*] 第二阶段：创建模拟器...")
+        all_related_list = sorted(all_related_addrs)
+        
+        # 构建需要执行的指令序列（包含相关指令和跳转指令本身，按地址排序）
+        # 这样可以在执行到跳转指令时立即读取寄存器
+        jump_addrs_set = {info['addr'] for info in jump_info_list}
+        all_exec_addrs = sorted(all_related_addrs | jump_addrs_set)
+        
+        # 寄存器映射
+        reg_map = {
+            'x0': UC_ARM64_REG_X0, 'x1': UC_ARM64_REG_X1, 'x2': UC_ARM64_REG_X2,
+            'x3': UC_ARM64_REG_X3, 'x4': UC_ARM64_REG_X4, 'x5': UC_ARM64_REG_X5,
+            'x6': UC_ARM64_REG_X6, 'x7': UC_ARM64_REG_X7, 'x8': UC_ARM64_REG_X8,
+            'x9': UC_ARM64_REG_X9, 'x10': UC_ARM64_REG_X10, 'x11': UC_ARM64_REG_X11,
+            'x12': UC_ARM64_REG_X12, 'x13': UC_ARM64_REG_X13, 'x14': UC_ARM64_REG_X14,
+            'x15': UC_ARM64_REG_X15, 'x16': UC_ARM64_REG_X16, 'x17': UC_ARM64_REG_X17,
+            'x18': UC_ARM64_REG_X18, 'x19': UC_ARM64_REG_X19, 'x20': UC_ARM64_REG_X20,
+            'x21': UC_ARM64_REG_X21, 'x22': UC_ARM64_REG_X22, 'x23': UC_ARM64_REG_X23,
+            'x24': UC_ARM64_REG_X24, 'x25': UC_ARM64_REG_X25, 'x26': UC_ARM64_REG_X26,
+            'x27': UC_ARM64_REG_X27, 'x28': UC_ARM64_REG_X28, 'x29': UC_ARM64_REG_X29,
+            'x30': UC_ARM64_REG_X30,
+        }
+        
+        # 创建地址到跳转信息的映射
+        addr_to_jump_info = {info['addr']: info for info in jump_info_list}
+        
+        # 分组：有CSEL的和没有CSEL的
+        has_csel = any(info['csel_info'] for info in jump_info_list)
+        
+        if has_csel:
+            print(f"{indent}[*] 检测到条件跳转，需要模拟两次")
+            # 模拟两次：true和false
+            for condition_state in ['true', 'false']:
+                print(f"{indent}  [*] 模拟执行（条件={condition_state}）...")
+                mu = self.create_emulator(instructions, all_related_list, self.enable_mem_trace)
+                
+                # Patch所有CSEL指令
+                insn_dict = {addr: insn for addr, insn in instructions}
+                for info in jump_info_list:
+                    if info['csel_info']:
+                        for csel_addr, csel_cond in info['csel_info']:
+                            if csel_addr in insn_dict:
+                                csel_insn = insn_dict[csel_addr]
+                                if len(csel_insn.operands) >= 3:
+                                    dest_reg = csel_insn.reg_name(csel_insn.operands[0].reg)
+                                    true_reg = csel_insn.reg_name(csel_insn.operands[1].reg)
+                                    false_reg = csel_insn.reg_name(csel_insn.operands[2].reg)
+                                    src_reg = true_reg if condition_state == 'true' else false_reg
+                                    
+                                    try:
+                                        mov_code = f"mov {dest_reg}, {src_reg}"
+                                        encoding, count = self.ks.asm(mov_code, csel_addr)
+                                        if encoding:
+                                            emu_addr = self.load_address + (csel_addr - self.base_address)
+                                            mu.mem_write(emu_addr, bytes(encoding))
+                                    except:
+                                        pass
+                
+                # 按顺序执行指令，遇到跳转指令时立即读取寄存器
+                for addr in all_exec_addrs:
+                    try:
+                        emu_addr = self.load_address + (addr - self.base_address)
+                        mu.emu_start(emu_addr, emu_addr + 4, count=1)
                         
-                        # 打印条件码
-                        condition = targets.get('condition', 'unknown')
-                        if condition != 'unknown':
-                            print(f"{indent}[*] CSEL条件码: {condition.upper()}")
-                        
-                        jump_record = JumpRecord(
-                            address=addr,
-                            jump_type=JumpType.INDIRECT,
-                            target_address=targets.get('default'),
-                            register=target_reg,
-                            related_instructions=related_addrs,
-                            condition=condition,
-                            condition_true=targets.get('true'),
-                            condition_false=targets.get('false')
-                        )
-                    else:
-                        # 无CSEL，正常模拟一次
-                        target = self.emulate_and_get_jump_target(instructions, idx, related_addrs)
-                        
-                        jump_record = JumpRecord(
-                            address=addr,
-                            jump_type=JumpType.INDIRECT,
-                            target_address=target,
-                            register=target_reg,
-                            related_instructions=related_addrs
-                        )
-                    
-                    func_info.jump_records.append(jump_record)
-                    
-                    # 处理跳转目标（可能有多个）
-                    targets_to_analyze = []
-                    if jump_record.target_address:
-                        targets_to_analyze.append(jump_record.target_address)
-                        print(f"{indent}[+] 跳转目标: 0x{jump_record.target_address:x}")
-                    
-                    if jump_record.condition_true:
-                        targets_to_analyze.append(jump_record.condition_true)
-                        print(f"{indent}[+] 条件为真时目标: 0x{jump_record.condition_true:x}")
-                    
-                    if jump_record.condition_false:
-                        targets_to_analyze.append(jump_record.condition_false)
-                        print(f"{indent}[+] 条件为假时目标: 0x{jump_record.condition_false:x}")
-                    
-                    # 如果是BLR，检查所有目标是否在当前SO内
-                    if insn.mnemonic == 'blr' and recursion_depth < max_depth:
-                        for target in targets_to_analyze:
-                            if self.is_address_in_current_so(target):
-                                try:
-                                    target_offset = self.address_to_offset(target)
-                                    print(f"{indent}[*] 目标 0x{target:x} 在当前SO内，递归分析...")
-                                    called_func = self.analyze_function(target_offset, None, 
-                                                                       recursion_depth + 1, max_depth)
-                                    func_info.called_functions.add(target)
-                                except Exception as e:
-                                    print(f"{indent}[-] 无法分析被调用函数 0x{target:x}: {e}")
-                            else:
-                                print(f"{indent}[*] 跳转到外部库 0x{target:x}，跳过递归分析")
+                        # 如果这个地址是跳转指令，立即读取目标寄存器
+                        if addr in addr_to_jump_info:
+                            info = addr_to_jump_info[addr]
+                            target_reg_lower = info['target_reg'].lower()
+                            if target_reg_lower in reg_map:
+                                value = mu.reg_read(reg_map[target_reg_lower])
+                                if condition_state == 'true':
+                                    info['target_true'] = value
+                                else:
+                                    info['target_false'] = value
+                    except:
+                        pass
+        else:
+            # 无CSEL，只需模拟一次
+            print(f"{indent}[*] 模拟执行...")
+            mu = self.create_emulator(instructions, all_related_list, self.enable_mem_trace)
             
-            # 检查直接调用
-            elif insn.mnemonic in ['bl', 'b']:
-                if len(insn.operands) > 0 and insn.operands[0].type == ARM64_OP_IMM:
-                    target = insn.operands[0].imm
-                    print(f"{indent}[*] 发现直接调用: 0x{addr:x} -> 0x{target:x}")
+            # 按顺序执行指令，遇到跳转指令时立即读取寄存器
+            for addr in all_exec_addrs:
+                try:
+                    emu_addr = self.load_address + (addr - self.base_address)
+                    mu.emu_start(emu_addr, emu_addr + 4, count=1)
                     
-                    # BL指令，检查目标是否在当前SO内
-                    if insn.mnemonic == 'bl' and recursion_depth < max_depth:
+                    # 如果这个地址是跳转指令，立即读取目标寄存器
+                    if addr in addr_to_jump_info:
+                        info = addr_to_jump_info[addr]
+                        target_reg_lower = info['target_reg'].lower()
+                        if target_reg_lower in reg_map:
+                            info['target_value'] = mu.reg_read(reg_map[target_reg_lower])
+                except:
+                    pass
+        
+        # ========== 第三阶段：生成JumpRecord ==========
+        print(f"{indent}[*] 第三阶段：生成跳转记录...")
+        for info in jump_info_list:
+            # 根据模拟方式获取目标值
+            if has_csel:
+                # 如果函数中有CSEL，所有跳转都被模拟了两次
+                true_target = info.get('target_true')
+                false_target = info.get('target_false')
+                
+                # 检查该跳转是否真的有CSEL
+                if info['csel_info']:
+                    # 有CSEL的跳转：使用条件分支结果
+                    condition = info['csel_info'][0][1] if info['csel_info'] else 'unknown'
+                    
+                    # 检查两个目标是否相同
+                    if true_target == false_target:
+                        jump_record = JumpRecord(
+                            address=info['addr'],
+                            jump_type=JumpType.INDIRECT,
+                            target_address=true_target,
+                            register=info['target_reg'],
+                            related_instructions=info['related_addrs'],
+                            condition=condition
+                        )
+                        print(f"{indent}  [+] 0x{info['addr']:x}: 条件={condition.upper()}, "
+                              f"两个分支相同=0x{true_target if true_target else 0:x}")
+                    else:
+                        jump_record = JumpRecord(
+                            address=info['addr'],
+                            jump_type=JumpType.INDIRECT,
+                            target_address=None,
+                            register=info['target_reg'],
+                            related_instructions=info['related_addrs'],
+                            condition=condition,
+                            condition_true=true_target,
+                            condition_false=false_target
+                        )
+                        print(f"{indent}  [+] 0x{info['addr']:x}: 条件={condition.upper()}, "
+                              f"true=0x{true_target if true_target else 0:x}, "
+                              f"false=0x{false_target if false_target else 0:x}")
+                else:
+                    # 没有CSEL的跳转：两次模拟结果应该相同，取其一
+                    target = true_target if true_target is not None else false_target
+                    jump_record = JumpRecord(
+                        address=info['addr'],
+                        jump_type=JumpType.INDIRECT,
+                        target_address=target,
+                        register=info['target_reg'],
+                        related_instructions=info['related_addrs']
+                    )
+                    print(f"{indent}  [+] 0x{info['addr']:x}: target=0x{target if target else 0:x}")
+            else:
+                # 无CSEL的情况：只模拟了一次，使用target_value
+                target = info.get('target_value')
+                jump_record = JumpRecord(
+                    address=info['addr'],
+                    jump_type=JumpType.INDIRECT,
+                    target_address=target,
+                    register=info['target_reg'],
+                    related_instructions=info['related_addrs']
+                )
+                print(f"{indent}  [+] 0x{info['addr']:x}: target=0x{target if target else 0:x}")
+            
+            func_info.jump_records.append(jump_record)
+        
+        # ========== 第四阶段：处理递归分析 ==========
+        if recursion_depth < max_depth:
+            print(f"{indent}[*] 第四阶段：递归分析被调用函数...")
+            
+            # 收集所有需要递归分析的目标
+            targets_to_analyze = set()
+            for jump_record in func_info.jump_records:
+                # 只对BLR类型递归
+                insn_dict = {addr: insn for addr, insn in instructions}
+                if jump_record.address in insn_dict:
+                    insn = insn_dict[jump_record.address]
+                    if insn.mnemonic == 'blr':
+                        if jump_record.target_address:
+                            targets_to_analyze.add(jump_record.target_address)
+                        if jump_record.condition_true:
+                            targets_to_analyze.add(jump_record.condition_true)
+                        if jump_record.condition_false:
+                            targets_to_analyze.add(jump_record.condition_false)
+            
+            # 递归分析
+            for target in targets_to_analyze:
+                if self.is_address_in_current_so(target):
+                    try:
+                        target_offset = self.address_to_offset(target)
+                        print(f"{indent}  [*] 递归分析 0x{target:x}...")
+                        called_func = self.analyze_function(target_offset, None, 
+                                                           recursion_depth + 1, max_depth)
+                        func_info.called_functions.add(target)
+                    except Exception as e:
+                        print(f"{indent}  [-] 递归分析失败 0x{target:x}: {e}")
+            
+            # 检查直接调用（BL指令）
+            for idx, (addr, insn) in enumerate(instructions):
+                if insn.mnemonic == 'bl':
+                    if len(insn.operands) > 0 and insn.operands[0].type == ARM64_OP_IMM:
+                        target = insn.operands[0].imm
                         if self.is_address_in_current_so(target):
                             try:
                                 target_offset = self.address_to_offset(target)
-                                print(f"{indent}[*] 目标在当前SO内，递归分析...")
+                                print(f"{indent}  [*] 递归分析 BL 0x{target:x}...")
                                 called_func = self.analyze_function(target_offset, None,
                                                                    recursion_depth + 1, max_depth)
                                 func_info.called_functions.add(target)
                             except Exception as e:
-                                print(f"{indent}[-] 无法分析被调用函数: {e}")
-                        else:
-                            print(f"{indent}[*] 跳转到外部库 0x{target:x}，跳过递归分析")
-                            # 虽然不递归分析，但仍记录这个外部调用
-                            func_info.called_functions.add(target)
+                                print(f"{indent}  [-] 递归分析失败: {e}")
         
         self.functions[start_addr] = func_info
         return func_info
@@ -983,7 +959,49 @@ class ARM64Analyzer:
                         print(f"[!] 复杂条件跳转 0x{jump_record.address:x}: 两个目标都需要跳转")
                         print(f"    条件为真: 0x{true_target:x}")
                         print(f"    条件为假: 0x{false_target:x}")
-                        print(f"    [警告] 无法用单一指令patch，需要插入多条指令")
+                        print(f"    条件码: {condition.upper()}")
+                        
+                        # 获取related_instructions中的最后一个指令
+                        if jump_record.related_instructions:
+                            related_addrs = sorted(jump_record.related_instructions)
+                            # 找到在BR之前的最后一个相关指令
+                            prev_addrs = [addr for addr in related_addrs if addr < jump_record.address]
+                            
+                            if prev_addrs:
+                                prev_insn_addr = prev_addrs[-1]
+                                print(f"    [*] 使用最后一个相关指令: 0x{prev_insn_addr:x}")
+                                
+                                try:
+                                    # 读取前序指令（仅用于显示）
+                                    prev_offset = self.address_to_offset(prev_insn_addr)
+                                    prev_code = self.read_code(prev_offset, 4)
+                                    prev_insn = next(self.cs.disasm(prev_code, prev_insn_addr))
+                                    print(f"    [*] 前序指令: {prev_insn.mnemonic} {prev_insn.op_str}")
+                                    
+                                    # 策略: 前序指令 -> B.condition #true_target
+                                    #       当前BR -> B #false_target
+                                    # 这样：条件成立时跳到true_target，条件不成立时继续执行到BR然后跳到false_target
+                                    
+                                    asm_code1 = f"b.{condition} #0x{true_target:x}"
+                                    encoding1, count1 = self.ks.asm(asm_code1, prev_insn_addr)
+                                    
+                                    asm_code2 = f"b #0x{false_target:x}"
+                                    encoding2, count2 = self.ks.asm(asm_code2, jump_record.address)
+                                    
+                                    if encoding1 and len(encoding1) == 4 and encoding2 and len(encoding2) == 4:
+                                        self.patches[prev_insn_addr] = bytes(encoding1)
+                                        self.patches[jump_record.address] = bytes(encoding2)
+                                        print(f"    [+] Patch成功:")
+                                        print(f"        0x{prev_insn_addr:x}: {prev_insn.mnemonic} {prev_insn.op_str} -> B.{condition.upper()} #0x{true_target:x}")
+                                        print(f"        0x{jump_record.address:x}: BR -> B #0x{false_target:x}")
+                                    else:
+                                        print(f"    [-] Patch失败: 汇编生成失败")
+                                except Exception as e:
+                                    print(f"    [-] Patch失败: {e}")
+                            else:
+                                print(f"    [警告] 未找到BR之前的相关指令，无法patch")
+                        else:
+                            print(f"    [警告] 没有相关指令记录，无法patch")
                     
                     # 情况4: 两个目标相同（虽然前面逻辑会合并到default，但以防万一）
                     elif true_target == false_target:
