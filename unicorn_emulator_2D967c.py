@@ -401,7 +401,11 @@ def emulate_libcore_function():
             
             # 计算相对于BASE_ADDR的偏移量
             offset = address - BASE_ADDR
-            
+            if offset == 0x2d9d78:
+                size = mu.reg_read(UC_ARM64_REG_X0)
+                # 记录 x0和x21
+        
+                return
             if offset == 0x61A5C0:
                 size = mu.reg_read(UC_ARM64_REG_X0)
                 # 记录 x0和x21
@@ -466,7 +470,7 @@ def emulate_libcore_function():
                 # print("执行__memset_chk函数")
                 return
         # 添加系统调用钩子，用于处理可能的系统调用形式的内存分配
-        def hook_syscall(uc, user_data):
+        def hook_syscall(uc, user_data,size):
             # 获取X8寄存器中的系统调用编号
             syscall_num = uc.reg_read(UC_ARM64_REG_X8)
             
@@ -496,7 +500,7 @@ def emulate_libcore_function():
         mu.hook_add(UC_HOOK_MEM_READ | UC_HOOK_MEM_WRITE, hook_mem_access)
         mu.hook_add(UC_HOOK_MEM_READ_UNMAPPED | UC_HOOK_MEM_WRITE_UNMAPPED | UC_HOOK_MEM_FETCH_UNMAPPED, hook_mem_error)
         # 添加代码执行钩子
-        mu.hook_add(UC_HOOK_INTR, hook_syscall)
+        # mu.hook_add(UC_HOOK_INTR, hook_syscall)
 
         
         # 添加系统调用钩子

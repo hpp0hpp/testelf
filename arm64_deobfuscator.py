@@ -838,8 +838,7 @@ class ARM64Analyzer:
                     try:
                         target_offset = self.address_to_offset(target)
                         print(f"{indent}  [*] 递归分析 0x{target:x}...")
-                        called_func = self.analyze_function(target_offset, None, 
-                                                           recursion_depth + 1, max_depth)
+                        called_func = self.analyze_function(target_offset, None, recursion_depth + 1, max_depth)
                         func_info.called_functions.add(target)
                     except Exception as e:
                         print(f"{indent}  [-] 递归分析失败 0x{target:x}: {e}")

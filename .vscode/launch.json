@@ -13,8 +13,12 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "args": [
-                "D:/crack/jiongciyuan/libcore.so",
-                "0x2D967c",
+                "D:/crack/jiongciyuan/libcore_patched.so",
+                "0x2D21a4",
+                "-o",
+                "D:/crack/jiongciyuan/testelf/output_unicorn_2D967c.so",
+                "--end",
+                "0x2D3538",
                 // "--trace-mem"
             ]
         }
