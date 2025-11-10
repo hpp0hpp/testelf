@@ -9,6 +9,7 @@ import traceback
 import json
 # 引入capstone
 import capstone
+# from udbserver import udbserver
 
 from unicorn_aes_hooks import install_hooks
 # 初始化capstone
@@ -137,12 +138,15 @@ DATA_ADDR_10 = 0x83003000  # 指针10地址 (TPIDR_EL0)
 X3_DATA_ADDR = 0x83002000  # x4指向的字符串
 TPIDR_TARGET_ADDR = BASE_ADDR + 0x20d4fa688  # TPIDR_EL0指向的目标地址
 
+OUT_DATA_ADDR = 0x84000000  # 输出的地址
+
+
 # 根据输入2.txt中的数据定义
 X0_HEX_DATA = "637C777BF26B6FC53001672BFED7AB76CA82C97DFA5947F0ADD4A2AF9CA472C0B7FD9326363FF7CC34A5E5F171D8311504C723C31896059A071280E2EB27B27509832C1A1B6E5AA0523BD6B329E32F8453D100ED20FCB15B6ACBBE394A4C58CFD0EFAAFB434D338545F9027F503C9FA851A3408F929D38F5BCB6DA2110FFF3D2CD0C13EC5F974417C4A77E3D645D197360814FDC222A908846EEB814DE5E0BDBE0323A0A4906245CC2D3AC629195E479E7C8376D8DD54EA96C56F4EA657AAE08BA78252E1CA6B4C6E8DD741F4BBD8B8A703EB5664803F60E613557B986C11D9EE1F8981169D98E949B1E87E9CE5528DF8CA1890DBFE6426841992D0FB054BB16"
 X1_STRING = "cBDw1t5m3WC9vH+9v7zBcHYHc75D1e0mbXuod2yPcqDZ1tImcWCpvtiTv2st+HeZbtzCvNyN32yDc8+937sh+85Cb8cw+/CMcH6NvHeHcI=="
 X2_STRING = "ziISjqkXPsGUMRNGyWigxDGtJbfTdcGv"
 X3_STRING = "WonrnVkxeIxDcFbv"
-TPIDR_HEX_DATA = "00000000000000003031323334353637383900ffffffffff"
+TPIDR_HEX_DATA = "00000000000000003031323334353637383900ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00010203040506070809ffffffffffffff0a0b0c0d0e0fffffffffffffffffffffffffffffffffffffffffffffffffffff0a0b0c0d0e0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 
 # 转换hex字符串为字节数据
 def hex_to_bytes(hex_str):
@@ -202,7 +206,7 @@ def emulate_libcore_function():
         mu = Uc(UC_ARCH_ARM64, UC_MODE_ARM)
         
         # 读取libcore.so文件
-        libcore_path = 'D:\\crack\\jiongciyuan\\libcore.bin'
+        libcore_path = 'D:\\crack\\jiongciyuan\\unicorn\\libcore.bin'
         libcore_data = read_libcore_so(libcore_path)
         
         if not libcore_data:
@@ -221,6 +225,8 @@ def emulate_libcore_function():
             
             # 映射一个连续的大内存块来覆盖所有需要的地址
             mu.mem_map(0x80000000, 0x4000000, UC_PROT_ALL)  # 64MB连续内存
+
+            mu.mem_map(OUT_DATA_ADDR & ~0xFFF  , 0x4000, UC_PROT_ALL)  # 
         except UcError as e:
             log(f"内存映射失败: {e} [初始化阶段]")
             return
@@ -306,6 +312,7 @@ def emulate_libcore_function():
         
         # TPIDR_EL0的指针10 -> TPIDR_TARGET_ADDR
         mu.mem_write(DATA_ADDR_10, TPIDR_TARGET_ADDR.to_bytes(8, byteorder='little'))
+        mu.mem_write(DATA_ADDR_10+0x28, hex_to_bytes('bab98ad68bd00d53'))
  # 结尾地址
         
         # 设置寄存器
@@ -316,8 +323,8 @@ def emulate_libcore_function():
         mu.reg_write(UC_ARM64_REG_X3, DATA_ADDR_8)  # x3指向指针8
         mu.reg_write(UC_ARM64_REG_X4, X3_DATA_ADDR)  # x4指向字符串地址
         # 初始化x8寄存器
-        x8_value = BASE_ADDR + 0x15f338468
-        mu.reg_write(UC_ARM64_REG_X8, x8_value)  # x8值为base_addr+0x15f338468
+        # x8_value = BASE_ADDR + 0x15f338468
+        mu.reg_write(UC_ARM64_REG_X8, OUT_DATA_ADDR)  # x8值为base_addr+0x15f338468
         
         # 初始化TPIDR_EL0寄存器
         mu.reg_write(UC_ARM64_REG_TPIDR_EL0, DATA_ADDR_10)  # TPIDR_EL0值为指针10
@@ -355,9 +362,12 @@ def emulate_libcore_function():
             #     X2_DATA_ADDR - 0x100 <= address <= X2_DATA_ADDR + 0x1000 or
             #     X3_DATA_ADDR - 0x100 <= address <= X3_DATA_ADDR + 0x1000):
             offset = uc.reg_read(UC_ARM64_REG_PC) - BASE_ADDR
+            if offset not in [0x2D45E4,0x2D462C,0x2D4748,0x2D4770]: #0x2D45E4,0x2D462C,0x2D4748,0x2D4770
+                return
             if access == UC_MEM_WRITE:
+                log(f" 偏移0x{offset:x} write: 0x{address:x}, 大小: {size}, 值: 0x{value:x}")
                 pass
-                # log(f" 偏移0x{offset:x} write: 0x{address:x}, 大小: {size}, 值: 0x{value:x}")
+
             elif access == UC_MEM_READ:
                 #如果地址不是0x8开头的就忽略
                 # if not hex(address).startswith("0x8"):
@@ -365,7 +375,7 @@ def emulate_libcore_function():
                 try: 
                     value = mu.mem_read(address, size).hex()
                     
-                    # log(f" 偏移0x{offset:x} read: 0x{address:x}, 大小: {size}, 值: 0x{value}")
+                    log(f" 偏移0x{offset:x} read: 0x{address:x}, 大小: {size}, 值: 0x{value}")
                 except Exception as e:
                     pass
                     log(f" 偏移0x{offset:x} read: 0x{address:x}, 大小: {size}, 异常: {e}")
@@ -392,13 +402,26 @@ def emulate_libcore_function():
             
             # 只输出重要的内存错误信息
             if address > 0x100000000:  # 过滤掉明显无效的地址
-                log(f"内存错误: 访问无效地址 0x{address:x}{pc_info}")
+                # log(f"内存错误: 访问无效地址 0x{address:x}    {pc_info}")
                 # 对于读取错误，我们可以尝试提供一个默认值
                 if access == UC_MEM_READ_UNMAPPED:
+                    log(f"内存错误: 读取无效地址 0x{address:x}    {pc_info}")
+
                     uc.mem_map(address & ~0xFFF, 0x1000)  # 映射一个页
                     uc.mem_write(address, value.to_bytes(size, 'little'))  # 写入默认值0
                     return True  # 继续执行，让Unicorn使用默认值
- 
+                elif access == UC_MEM_WRITE_UNMAPPED:
+                    log(f"内存错误: 写入无效地址 0x{address:x} 值{value:x}   {pc_info}")
+                    return_addr = mu.reg_read(UC_ARM64_REG_X30)
+                    return_offset = return_addr - BASE_ADDR
+                    log(f"返回地址: 0x{return_offset:x}")
+                    # 收集backtrace的返回地址
+                    ret_addrs = get_backtrace(uc)
+                    # 计算偏移量
+                    offsets = [hex(addr - BASE_ADDR) for addr in ret_addrs]
+                    log("Backtrace offsets:", offsets)  # 输出各层调用的偏移地址
+                    uc.mem_map(address & ~0xFFF, 0x1000)  # 映射一个页
+                    return True  # 继续执行
             else:
                 log(f"内存错误: 访问类型: {access}, 地址: 0x{address:x}, 大小: {size}{pc_info}")
                                 #记录返回地址
@@ -418,9 +441,9 @@ def emulate_libcore_function():
             
             # 计算相对于BASE_ADDR的偏移量
             offset = address - BASE_ADDR
-            if offset in [0x2D0A18]:
-                size = mu.reg_read(UC_ARM64_REG_X0)
-                print(mu.mem_read(size-100,116).hex())
+            if offset in [0x2d01dc,]:
+                r2 = mu.reg_read(UC_ARM64_REG_X2)
+                print(mu.mem_read(read_pointer_from_memory(mu,r2), 112).hex())
                 # 记录 x0和x21
         
                 return
@@ -458,17 +481,8 @@ def emulate_libcore_function():
                 return_addr = mu.reg_read(UC_ARM64_REG_X30)
                 # 执行跳转
                 mu.reg_write(UC_ARM64_REG_PC, return_addr)
-                
-      
             if offset == 0x2DB108 or offset == 0x002d9738:
-                #int64_t sub_2db108(int64_t arg1, size_t arg2, int32_t arg3, size_t arg4)
-                # {
-                #     return __memset_chk(arg1, arg3, arg4, arg2);
-                # }
 
-                # __memset_chk(void *dest, int c, size_t n, size_t dest_sz)
-                # dest = x0, c = w2, n = x3, dest_sz = x1
-                # 模拟上述函数然后直接返回
                 dest = mu.reg_read(UC_ARM64_REG_X0)
                 c = mu.reg_read(UC_ARM64_REG_W2)
                 n = mu.reg_read(UC_ARM64_REG_X3)
@@ -516,11 +530,10 @@ def emulate_libcore_function():
         # 添加钩子
         log("添加调试钩子...")
         mu.hook_add(UC_HOOK_MEM_READ | UC_HOOK_MEM_WRITE, hook_mem_access)
-        mu.hook_add(UC_HOOK_MEM_READ_UNMAPPED | UC_HOOK_MEM_WRITE_UNMAPPED | UC_HOOK_MEM_FETCH_UNMAPPED, hook_mem_error)
+        # mu.hook_add(UC_HOOK_MEM_READ_UNMAPPED | UC_HOOK_MEM_WRITE_UNMAPPED | UC_HOOK_MEM_FETCH_UNMAPPED, hook_mem_error)
         # 添加代码执行钩子
         # mu.hook_add(UC_HOOK_INTR, hook_syscall)
 
-        
         # 添加系统调用钩子
         # install_hooks(mu, base_addr=BASE_ADDR)
         mu.hook_add(UC_HOOK_CODE, hook_code)
@@ -535,11 +548,14 @@ def emulate_libcore_function():
             mu.emu_start(function_addr, function_end_addr)  
             log("函数执行完成")
             
-            # 读取结果（假设结果在x0寄存器中）
-            result = mu.reg_read(UC_ARM64_REG_X0)
-            log(f"函数返回值 (x0): 0x{result:x}")
             
-            log("模拟执行完成")
+            result_addr =read_pointer_from_memory (mu ,OUT_DATA_ADDR)
+            result_addr1 = read_pointer_from_memory (mu ,OUT_DATA_ADDR+8)
+            lenth = result_addr1 - result_addr
+            result_data = mu.mem_read(result_addr, lenth)
+            print(f"函数返回值 (x0): {result_data.hex()} 长度: {lenth} 字节, 地址: 0x{result_addr:x}")
+            
+            print("模拟执行完成")
             
         except UcError as e:
                 # 尝试获取执行位置信息
