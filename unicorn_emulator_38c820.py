@@ -126,16 +126,16 @@ X0_DATA_ADDR = 0x80003000  # x0指向的32字节数据
 
 DATA_ADDR_4 = 0x81000000  # 指针4地址 (x1)
 DATA_ADDR_5 = 0x81001000  # 指针5地址
-X1_DATA_ADDR = 0x81002000  # x1指向的字符串
+PlainText_DATA_ADDR = 0x81002000  # x1指向的字符串
 
 DATA_ADDR_6 = 0x82000000  # 指针6地址 (x2)
 DATA_ADDR_7 = 0x82001000  # 指针7地址
-X2_DATA_ADDR = 0x82002000  # x2指向的字符串
+key_DATA_ADDR = 0x82002000  # x2指向的字符串
 
 DATA_ADDR_8 = 0x83000000  # 指针8地址 (x4)
 DATA_ADDR_9 = 0x83001000  # 指针9地址 (x3)
 DATA_ADDR_10 = 0x83003000  # 指针10地址 (TPIDR_EL0)
-X3_DATA_ADDR = 0x83002000  # x4指向的字符串
+IV_DATA_ADDR = 0x83002000  # x4指向的字符串
 TPIDR_TARGET_ADDR = BASE_ADDR + 0x20d4fa688  # TPIDR_EL0指向的目标地址
 
 OUT_DATA_ADDR = 0x84000000  # 输出的地址
@@ -156,9 +156,10 @@ def hex_to_bytes(hex_str):
 def string_to_bytes(text):
     return text.encode('utf-8')
 
-log_f =open("unicorn_emulator_2D967c_log.txt","w")
+log_f =open("unicorn_emulator_38c820_log.txt","w")
 def log(s):
     # log(s)
+    print(s)
     log_f.write(s+"\n")
     log_f.flush()
 
@@ -222,7 +223,8 @@ def emulate_libcore_function():
             mu.mem_map(BASE_ADDR, lib_size, UC_PROT_ALL)
             
             mu.mem_map(STACK_ADDR, STACK_SIZE, UC_PROT_ALL)
-            
+            sp_initial = STACK_ADDR + STACK_SIZE  
+            mu.reg_write(UC_ARM64_REG_SP, sp_initial)
             # 映射一个连续的大内存块来覆盖所有需要的地址
             mu.mem_map(0x80000000, 0x4000000, UC_PROT_ALL)  # 64MB连续内存
 
@@ -261,93 +263,79 @@ def emulate_libcore_function():
         # 将数据写入内存
         log("将数据写入内存...")
         mu.mem_write(X0_DATA_ADDR, x0_data)
-        mu.mem_write(X1_DATA_ADDR, x1_data)
-        mu.mem_write(X2_DATA_ADDR, x2_data)
-        mu.mem_write(X3_DATA_ADDR, x3_data)
+        mu.mem_write(PlainText_DATA_ADDR, x1_data)
+        mu.mem_write(key_DATA_ADDR, x2_data)
+        mu.mem_write(key_DATA_ADDR+0xf0, hex_to_bytes("0a00000000000000"))
+        mu.mem_write(IV_DATA_ADDR, x3_data)
         # 写入TPIDR_EL0指向的数据
         tpidr_data = hex_to_bytes(TPIDR_HEX_DATA)
         mu.mem_write(TPIDR_TARGET_ADDR, tpidr_data)
         # log(f"TPIDR数据写入完成，大小: {len(tpidr_data)} 字节")
         
-        # 设置指针链
-        log("设置指针链...")
-        # 计算数据结尾地址
-        x0_end_addr = X0_DATA_ADDR + len(x0_data)
-        x1_end_addr = X1_DATA_ADDR + len(x1_data)
-        x2_end_addr = X2_DATA_ADDR + len(x2_data)
-        x3_end_addr = X3_DATA_ADDR + len(x3_data)
+#         # 设置指针链
+#         log("设置指针链...")
+#         # 计算数据结尾地址
+#         x0_end_addr = X0_DATA_ADDR + len(x0_data)
+#         x1_end_addr = PlainText_DATA_ADDR + len(x1_data)
+#         x2_end_addr = key_DATA_ADDR + len(x2_data)
+#         x3_end_addr = IV_DATA_ADDR + len(x3_data)
         
-        # x0 链: 指针1 -> 指针2 -> 数据
-        # 按照ARM64要求，在数据地址后面添加结尾地址
-        mu.mem_write(DATA_ADDR_1, DATA_ADDR_2.to_bytes(8, byteorder='little'))
-        mu.mem_write(DATA_ADDR_1+8, (DATA_ADDR_2+0x180).to_bytes(8, byteorder='little'))
-        for i in range(16):
-            mu.mem_write(DATA_ADDR_2+i*24, (X0_DATA_ADDR+i*16).to_bytes(8, byteorder='little'))
-            mu.mem_write(DATA_ADDR_2+i*24+8, (X0_DATA_ADDR+(i+1)*16).to_bytes(8, byteorder='little'))
-            mu.mem_write(DATA_ADDR_2+i*24+16, (X0_DATA_ADDR+(i+1)*16).to_bytes(8, byteorder='little'))
-        # mu.mem_write(DATA_ADDR_2 + 8, x0_end_addr.to_bytes(8, byteorder='little'))  # 结尾地址
-        mu.mem_write(BASE_ADDR+0x690ad8, DATA_ADDR_1.to_bytes(8, byteorder='little'))
-        # # 写DATA_ADDR_1+60 一个地址
-        mu.mem_write(DATA_ADDR_1 + 0x60, 0x80004000.to_bytes(8, byteorder='little'))
-        mu.mem_write(DATA_ADDR_1 + 0x68, (0x80004000+0xf0).to_bytes(8, byteorder='little'))
-        # mu.mem_write(0x80004000, 0x80005000.to_bytes(8, byteorder='little'))
-        for i in range(10):
-            mu.mem_write(0x80004000+i*24, (0x80005000+i*4).to_bytes(8, byteorder='little'))
-            mu.mem_write(0x80004000+i*24+8, (0x80005000+(i+1)*4).to_bytes(8, byteorder='little'))
-            mu.mem_write(0x80004000+i*24+16, (0x80005000+(i+1)*4).to_bytes(8, byteorder='little'))
-        mu.mem_write(0x80005000, hex_to_bytes("01000000640072000200000064002e00040000006e0074000800000074002e00100000002e005600200000007300690040000000650064008000000063006b001b0000006500000036000000616e6472"))
+#         # x0 链: 指针1 -> 指针2 -> 数据
+#         # 按照ARM64要求，在数据地址后面添加结尾地址
+#         mu.mem_write(DATA_ADDR_1, DATA_ADDR_2.to_bytes(8, byteorder='little'))
+#         mu.mem_write(DATA_ADDR_1+8, (DATA_ADDR_2+0x180).to_bytes(8, byteorder='little'))
+#         for i in range(16):
+#             mu.mem_write(DATA_ADDR_2+i*24, (X0_DATA_ADDR+i*16).to_bytes(8, byteorder='little'))
+#             mu.mem_write(DATA_ADDR_2+i*24+8, (X0_DATA_ADDR+(i+1)*16).to_bytes(8, byteorder='little'))
+#             mu.mem_write(DATA_ADDR_2+i*24+16, (X0_DATA_ADDR+(i+1)*16).to_bytes(8, byteorder='little'))
+#         # mu.mem_write(DATA_ADDR_2 + 8, x0_end_addr.to_bytes(8, byteorder='little'))  # 结尾地址
+#         mu.mem_write(BASE_ADDR+0x690ad8, DATA_ADDR_1.to_bytes(8, byteorder='little'))
+#         # # 写DATA_ADDR_1+60 一个地址
+#         mu.mem_write(DATA_ADDR_1 + 0x60, 0x80004000.to_bytes(8, byteorder='little'))
+#         mu.mem_write(DATA_ADDR_1 + 0x68, (0x80004000+0xf0).to_bytes(8, byteorder='little'))
+#         # mu.mem_write(0x80004000, 0x80005000.to_bytes(8, byteorder='little'))
+#         for i in range(10):
+#             mu.mem_write(0x80004000+i*24, (0x80005000+i*4).to_bytes(8, byteorder='little'))
+#             mu.mem_write(0x80004000+i*24+8, (0x80005000+(i+1)*4).to_bytes(8, byteorder='little'))
+#             mu.mem_write(0x80004000+i*24+16, (0x80005000+(i+1)*4).to_bytes(8, byteorder='little'))
+#         mu.mem_write(0x80005000, hex_to_bytes("01000000640072000200000064002e00040000006e0074000800000074002e00100000002e005600200000007300690040000000650064008000000063006b001b0000006500000036000000616e6472"))
 
-        # x1 链: 指针4 -> 字符串地址
-        mu.mem_write(DATA_ADDR_4, X1_DATA_ADDR.to_bytes(8, byteorder='little'))
-        mu.mem_write(DATA_ADDR_4 + 8, x1_end_addr.to_bytes(8, byteorder='little'))  # 结尾地址
+#         # x1 链: 指针4 -> 字符串地址
+#         mu.mem_write(DATA_ADDR_4, PlainText_DATA_ADDR.to_bytes(8, byteorder='little'))
+#         mu.mem_write(DATA_ADDR_4 + 8, x1_end_addr.to_bytes(8, byteorder='little'))  # 结尾地址
 
         
-        # x2 链: 指针6 -> 字符串地址
-        mu.mem_write(DATA_ADDR_6, X2_DATA_ADDR.to_bytes(8, byteorder='little')) 
-        mu.mem_write(DATA_ADDR_6 + 8, x2_end_addr.to_bytes(8, byteorder='little'))  # 结尾地址
+#         # x2 链: 指针6 -> 字符串地址
+#         mu.mem_write(DATA_ADDR_6, key_DATA_ADDR.to_bytes(8, byteorder='little')) 
+#         mu.mem_write(DATA_ADDR_6 + 8, x2_end_addr.to_bytes(8, byteorder='little'))  # 结尾地址
         
-        # x3: 指针8 -> 字符串地址
-        mu.mem_write(DATA_ADDR_8, X3_DATA_ADDR.to_bytes(8, byteorder='little'))
-        mu.mem_write(DATA_ADDR_8 + 8, x3_end_addr.to_bytes(8, byteorder='little'))  # 结尾地址
+#         # x3: 指针8 -> 字符串地址
+#         mu.mem_write(DATA_ADDR_8, IV_DATA_ADDR.to_bytes(8, byteorder='little'))
+#         mu.mem_write(DATA_ADDR_8 + 8, x3_end_addr.to_bytes(8, byteorder='little'))  # 结尾地址
         
-        # TPIDR_EL0的指针10 -> TPIDR_TARGET_ADDR
-        mu.mem_write(DATA_ADDR_10, TPIDR_TARGET_ADDR.to_bytes(8, byteorder='little'))
-        mu.mem_write(DATA_ADDR_10+0x28, hex_to_bytes('bab98ad68bd00d53'))
- # 结尾地址
+#         # TPIDR_EL0的指针10 -> TPIDR_TARGET_ADDR
+#         mu.mem_write(DATA_ADDR_10, TPIDR_TARGET_ADDR.to_bytes(8, byteorder='little'))
+#         mu.mem_write(DATA_ADDR_10+0x28, hex_to_bytes('bab98ad68bd00d53'))
+#  # 结尾地址
         
         # 设置寄存器
         log("设置寄存器...")
-        mu.reg_write(UC_ARM64_REG_X0, DATA_ADDR_1)  # x0指向指针1
-        mu.reg_write(UC_ARM64_REG_X1, DATA_ADDR_4)  # x1指向指针4
-        mu.reg_write(UC_ARM64_REG_X2, DATA_ADDR_6)  # x2指向指针6
-        mu.reg_write(UC_ARM64_REG_X3, DATA_ADDR_8)  # x3指向指针8
-        mu.reg_write(UC_ARM64_REG_X4, X3_DATA_ADDR)  # x4指向字符串地址
+        mu.reg_write(UC_ARM64_REG_X0, PlainText_DATA_ADDR)  # x0指向指针1
+        mu.reg_write(UC_ARM64_REG_X1, OUT_DATA_ADDR)  # x1指向指针4
+        mu.reg_write(UC_ARM64_REG_X2, len(X1_STRING))  # x2指向指针6
+        mu.reg_write(UC_ARM64_REG_X3, key_DATA_ADDR)  # x3指向指针8
+        mu.reg_write(UC_ARM64_REG_X4, IV_DATA_ADDR)  # x4指向字符串地址
+        mu.reg_write(UC_ARM64_REG_X5, 0)  # x4指向字符串地址
         # 初始化x8寄存器
-        # x8_value = BASE_ADDR + 0x15f338468
-        mu.reg_write(UC_ARM64_REG_X8, OUT_DATA_ADDR)  # x8值为base_addr+0x15f338468
-        
-        # 初始化TPIDR_EL0寄存器
-        mu.reg_write(UC_ARM64_REG_TPIDR_EL0, DATA_ADDR_10)  # TPIDR_EL0值为指针10
-        log(f"TPIDR_EL0设置为: 0x{DATA_ADDR_10:x}，指向: 0x{TPIDR_TARGET_ADDR:x}")
-        
-        mu.reg_write(UC_ARM64_REG_SP, STACK_ADDR + STACK_SIZE - 16)  # 设置栈指针
-        
-        # 验证寄存器设置
-        x0_val = mu.reg_read(UC_ARM64_REG_X0)
-        X1_val = mu.reg_read(UC_ARM64_REG_X1)
-        sp_val = mu.reg_read(UC_ARM64_REG_SP)
 
-        
-        # 模拟执行的函数地址 - 2d967c函数
-        function_offset = 0x2d967c
+        function_offset = 0x38c820
         function_addr = BASE_ADDR + function_offset
+
         # 设置一个合理的函数结束地址（假设函数大小为0x1000字节）
-        function_end_addr = BASE_ADDR + 0x2D9E2C
-        log(f"函数地址(2d967c): 0x{function_addr:x}")
+        function_end_addr = BASE_ADDR + 0x38CC04
         
         # 设置一个简单的返回地址（函数执行完后跳到这里）
         return_addr = BASE_ADDR + 0x305F38 # 增加距离以避免冲突
-        log(f"返回地址: 0x{return_addr:x}")
         
         # 在栈上压入返回地址
         log("在栈上压入返回地址...")
@@ -441,7 +429,7 @@ def emulate_libcore_function():
             
             # 计算相对于BASE_ADDR的偏移量
             offset = address - BASE_ADDR
-            log(f"执行到偏移0x{offset:x}")
+            print(f"执行到偏移0x{offset:x}")
             if offset in [0x2d01dc,]:
                 r2 = mu.reg_read(UC_ARM64_REG_X2)
                 print(mu.mem_read(read_pointer_from_memory(mu,r2), 112).hex())
@@ -531,12 +519,12 @@ def emulate_libcore_function():
         # 添加钩子
         log("添加调试钩子...")
         mu.hook_add(UC_HOOK_MEM_READ | UC_HOOK_MEM_WRITE, hook_mem_access)
-        # mu.hook_add(UC_HOOK_MEM_READ_UNMAPPED | UC_HOOK_MEM_WRITE_UNMAPPED | UC_HOOK_MEM_FETCH_UNMAPPED, hook_mem_error)
+        mu.hook_add(UC_HOOK_MEM_READ_UNMAPPED | UC_HOOK_MEM_WRITE_UNMAPPED | UC_HOOK_MEM_FETCH_UNMAPPED, hook_mem_error)
         # 添加代码执行钩子
         # mu.hook_add(UC_HOOK_INTR, hook_syscall)
 
         # 添加系统调用钩子
-        install_hooks(mu, base_addr=BASE_ADDR)
+        # install_hooks(mu, base_addr=BASE_ADDR)
         mu.hook_add(UC_HOOK_CODE, hook_code)
         
         # log(f"目标地址: 0x{return_addr:x}")
