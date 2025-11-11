@@ -157,7 +157,7 @@ def hex_to_bytes(hex_str):
 def string_to_bytes(text):
     return text.encode('utf-8')
 
-log_f =open("unicorn_emulator_2D967c_log.txt","w")
+log_f =open("unicorn_emulator_2D967c_log.txt","w",encoding='utf-8')
 def log(s):
     # log(s)
     log_f.write(s+"\n")
@@ -367,7 +367,7 @@ def emulate_libcore_function():
             #     return
             if access == UC_MEM_WRITE:
                 try:
-                    log(f"write: 0x{value:x} at 0x{address:x}")
+                    log(f"offset 0x{offset:x} write: 0x{value:x} at 0x{address:x}")
                 except Exception as e:
                     pass
 
@@ -379,7 +379,7 @@ def emulate_libcore_function():
 
                     value = int.from_bytes(mu.mem_read(address, size),byteorder='little') 
                     
-                    log(f"read: 0x{value:x} at 0x{address:x}")
+                    log(f"offset 0x{offset:x} read: 0x{value:x} at 0x{address:x}")
                 except Exception as e:
                     pass
                     log(f" 偏移0x{offset:x} read: 0x{address:x}, 大小: {size}, 异常: {e}")
@@ -445,7 +445,7 @@ def emulate_libcore_function():
             
             # 计算相对于BASE_ADDR的偏移量
             offset = address - BASE_ADDR
-            log(f"执行到偏移0x{offset:x}")
+            # log(f"执行到偏移0x{offset:x}")
             if offset in [0x2d01dc,]:
                 r2 = mu.reg_read(UC_ARM64_REG_X2)
                 print(mu.mem_read(read_pointer_from_memory(mu,r2), 112).hex())
