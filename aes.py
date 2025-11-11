@@ -76,11 +76,14 @@ def inv_shift_rows(s):
     s[0][2], s[1][2], s[2][2], s[3][2] = s[2][2], s[3][2], s[0][2], s[1][2]
     s[0][3], s[1][3], s[2][3], s[3][3] = s[1][3], s[2][3], s[3][3], s[0][3]
 
+import copy
 def add_round_key(s, k):
+    print(f'add_round_key: {s}')
+    s_copy = copy.deepcopy(s)
     for i in range(4):
         for j in range(4):
-            s[i][j] =s[j][i] ^ k[i][j]
-            print(hex(s[i][j]))
+            s[i][j] =s_copy[i][j] ^ k[i][j]
+            print(f'add_round_key: {s_copy[i][j]:x},{k[i][j]:x} {hex(s[i][j])}')
 
 
 # learned from https://web.archive.org/web/20100626212235/http://cs.ucsb.edu/~koc/cs178/projects/JT/aes.c
@@ -229,6 +232,8 @@ class AES:
         assert len(plaintext) == 16
 
         plain_state = bytes2matrix(plaintext)
+        # 转置plain_state
+        plain_state =[[plain_state[j][i] for j in range(len(plain_state))] for i in range(len(plain_state[0]))]
 
         add_round_key(plain_state, self._key_matrices[0])
 
@@ -522,28 +527,37 @@ def benchmark():
 __all__ = ["encrypt", "decrypt", "AES"]
 
 if __name__ == '__main__':
-    import sys
-    write = lambda b: sys.stdout.buffer.write(b)
-    read = lambda: sys.stdin.buffer.read()
+    text = "0123456789"#"cBDw1t5m3WC9vH+9v7zBcHYHc75D1e0mbXuod2yPcqDZ1tImcWCpvtiTv2st+HeZbtzCvNyN32yDc8+937sh+85Cb8cw+/CMcH6NvHeHcI=="
+    key =b"\x7A\x69\x49\x53\x6A\x71\x6B\x58\x50\x73\x47\x55\x4D\x52\x4E\x47\x7B\x46\xE9\xB0\x11\x37\x82\xE8\x41\x44\xC5\xBD\x0C\x16\x8B\xFA"# "ziISjqkXPsGUMRNGyWigxDGtJbfTdcGv"
+    iv = "WonrnVkxeIxDcFbv"
 
-    if len(sys.argv) < 2:
-        print('Usage: ./aes.py encrypt "key" "message"')
-        print('Running tests...')
-        from tests import *
-        run()
-    elif len(sys.argv) == 2 and sys.argv[1] == 'benchmark':
-        benchmark()
-        exit()
-    elif len(sys.argv) == 3:
-        text = read()
-    elif len(sys.argv) > 3:
-        text = ' '.join(sys.argv[2:])
 
-    if 'encrypt'.startswith(sys.argv[1]):
-        write(encrypt(sys.argv[2], text))
-    elif 'decrypt'.startswith(sys.argv[1]):
-        write(decrypt(sys.argv[2], text))
-    else:
-        print('Expected command "encrypt" or "decrypt" in first argument.')
+    aes=AES(key)
+    encrypted = aes.encrypt_cbc(text.encode('utf-8'), iv.encode('utf-8'))
+    print(encrypted.hex())
 
-    # encrypt('my secret key', b'0' * 1000000) # 1 MB encrypted in 20 seconds.
+    # import sys
+    # write = lambda b: sys.stdout.buffer.write(b)
+    # read = lambda: sys.stdin.buffer.read()
+
+    # if len(sys.argv) < 2:
+    #     print('Usage: ./aes.py encrypt "key" "message"')
+    #     print('Running tests...')
+    #     from tests import *
+    #     run()
+    # elif len(sys.argv) == 2 and sys.argv[1] == 'benchmark':
+    #     benchmark()
+    #     exit()
+    # elif len(sys.argv) == 3:
+    #     text = read()
+    # elif len(sys.argv) > 3:
+    #     text = ' '.join(sys.argv[2:])
+
+    # if 'encrypt'.startswith(sys.argv[1]):
+    #     write(encrypt(sys.argv[2], text))
+    # elif 'decrypt'.startswith(sys.argv[1]):
+    #     write(decrypt(sys.argv[2], text))
+    # else:
+    #     print('Expected command "encrypt" or "decrypt" in first argument.')
+
+    # # encrypt('my secret key', b'0' * 1000000) # 1 MB encrypted in 20 seconds.

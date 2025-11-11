@@ -373,7 +373,7 @@ def emulate_libcore_function():
 
             elif access == UC_MEM_READ:
                 #如果地址不是0x8开头的就忽略
-                if  hex(address).startswith("0xcc"):
+                if  hex(address).startswith("0xcc") or address in [0x2d0a3c,0x2d1730]:
                     return
                 try: 
 
