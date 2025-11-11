@@ -157,7 +157,7 @@ def hex_to_bytes(hex_str):
 def string_to_bytes(text):
     return text.encode('utf-8')
 
-log_f =open("unicorn_emulator_2D967c_log.txt","w")
+log_f =open("unicorn_emulator_2D967c_log.txt","w",encoding='utf8')
 def log(s):
     # log(s)
     log_f.write(s+"\n")
@@ -367,7 +367,7 @@ def emulate_libcore_function():
             #     return
             if access == UC_MEM_WRITE:
                 try:
-                    log(f"write: 0x{value:x} at 0x{address:x}")
+                    log(f"偏移： 0x{offset:x} write: 0x{value:x} at 0x{address:x}")
                 except Exception as e:
                     pass
 
@@ -379,7 +379,7 @@ def emulate_libcore_function():
 
                     value = int.from_bytes(mu.mem_read(address, size),byteorder='little') 
                     
-                    log(f"read: 0x{value:x} at 0x{address:x}")
+                    log(f"偏移： 0x{offset:x} read: 0x{value:x} at 0x{address:x}")
                 except Exception as e:
                     pass
                     log(f" 偏移0x{offset:x} read: 0x{address:x}, 大小: {size}, 异常: {e}")
