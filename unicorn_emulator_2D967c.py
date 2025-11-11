@@ -143,7 +143,8 @@ OUT_DATA_ADDR = 0x84000000  # 输出的地址
 
 # 根据输入2.txt中的数据定义
 X0_HEX_DATA = "637C777BF26B6FC53001672BFED7AB76CA82C97DFA5947F0ADD4A2AF9CA472C0B7FD9326363FF7CC34A5E5F171D8311504C723C31896059A071280E2EB27B27509832C1A1B6E5AA0523BD6B329E32F8453D100ED20FCB15B6ACBBE394A4C58CFD0EFAAFB434D338545F9027F503C9FA851A3408F929D38F5BCB6DA2110FFF3D2CD0C13EC5F974417C4A77E3D645D197360814FDC222A908846EEB814DE5E0BDBE0323A0A4906245CC2D3AC629195E479E7C8376D8DD54EA96C56F4EA657AAE08BA78252E1CA6B4C6E8DD741F4BBD8B8A703EB5664803F60E613557B986C11D9EE1F8981169D98E949B1E87E9CE5528DF8CA1890DBFE6426841992D0FB054BB16"
-X1_STRING = "cBDw1t5m3WC9vH+9v7zBcHYHc75D1e0mbXuod2yPcqDZ1tImcWCpvtiTv2st+HeZbtzCvNyN32yDc8+937sh+85Cb8cw+/CMcH6NvHeHcI=="
+# X1_STRING = "cBDw1t5m3WC9vH+9v7zBcHYHc75D1e0mbXuod2yPcqDZ1tImcWCpvtiTv2st+HeZbtzCvNyN32yDc8+937sh+85Cb8cw+/CMcH6NvHeHcI=="
+X1_STRING = "0123456789"
 X2_STRING = "ziISjqkXPsGUMRNGyWigxDGtJbfTdcGv"
 X3_STRING = "WonrnVkxeIxDcFbv"
 TPIDR_HEX_DATA = "00000000000000003031323334353637383900ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00010203040506070809ffffffffffffff0a0b0c0d0e0fffffffffffffffffffffffffffffffffffffffffffffffffffff0a0b0c0d0e0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
@@ -362,20 +363,23 @@ def emulate_libcore_function():
             #     X2_DATA_ADDR - 0x100 <= address <= X2_DATA_ADDR + 0x1000 or
             #     X3_DATA_ADDR - 0x100 <= address <= X3_DATA_ADDR + 0x1000):
             offset = uc.reg_read(UC_ARM64_REG_PC) - BASE_ADDR
-            if offset not in [0x2D45E4,0x2D462C,0x2D4748,0x2D4770]: #0x2D45E4,0x2D462C,0x2D4748,0x2D4770
-                return
+            # if offset not in [0x2D45E4,0x2D462C,0x2D4748,0x2D4770]: #0x2D45E4,0x2D462C,0x2D4748,0x2D4770
+            #     return
             if access == UC_MEM_WRITE:
-                log(f" 偏移0x{offset:x} write: 0x{address:x}, 大小: {size}, 值: 0x{value:x}")
-                pass
+                try:
+                    log(f"write: 0x{value:x} at 0x{address:x}")
+                except Exception as e:
+                    pass
 
             elif access == UC_MEM_READ:
                 #如果地址不是0x8开头的就忽略
-                # if not hex(address).startswith("0x8"):
-                #     return
+                if  hex(address).startswith("0xcc"):
+                    return
                 try: 
-                    value = mu.mem_read(address, size).hex()
+
+                    value = int.from_bytes(mu.mem_read(address, size),byteorder='little') 
                     
-                    log(f" 偏移0x{offset:x} read: 0x{address:x}, 大小: {size}, 值: 0x{value}")
+                    log(f"read: 0x{value:x} at 0x{address:x}")
                 except Exception as e:
                     pass
                     log(f" 偏移0x{offset:x} read: 0x{address:x}, 大小: {size}, 异常: {e}")
