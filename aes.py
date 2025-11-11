@@ -79,7 +79,8 @@ def inv_shift_rows(s):
 def add_round_key(s, k):
     for i in range(4):
         for j in range(4):
-            s[i][j] ^= k[i][j]
+            s[i][j] =s[j][i] ^ k[i][j]
+            print(hex(s[i][j]))
 
 
 # learned from https://web.archive.org/web/20100626212235/http://cs.ucsb.edu/~koc/cs178/projects/JT/aes.c
