@@ -247,6 +247,9 @@ class AES:
         shift_rows(plain_state)
         add_round_key(plain_state, self._key_matrices[-1])
 
+        # 转置plain_state
+        plain_state =[[plain_state[j][i] for j in range(len(plain_state))] for i in range(len(plain_state[0]))]
+        
         return matrix2bytes(plain_state)
 
     def decrypt_block(self, ciphertext):
@@ -527,8 +530,8 @@ def benchmark():
 __all__ = ["encrypt", "decrypt", "AES"]
 
 if __name__ == '__main__':
-    text = "0123456789"#"cBDw1t5m3WC9vH+9v7zBcHYHc75D1e0mbXuod2yPcqDZ1tImcWCpvtiTv2st+HeZbtzCvNyN32yDc8+937sh+85Cb8cw+/CMcH6NvHeHcI=="
-    key =b"\x7A\x69\x49\x53\x6A\x71\x6B\x58\x50\x73\x47\x55\x4D\x52\x4E\x47\x7B\x46\xE9\xB0\x11\x37\x82\xE8\x41\x44\xC5\xBD\x0C\x16\x8B\xFA"# "ziISjqkXPsGUMRNGyWigxDGtJbfTdcGv"
+    text = "cBDw1t5m3WC9vH+9v7zBcHYHc75D1e0mbXuod2yPcqDZ1tImcWCpvtiTv2st+HeZbtzCvNyN32yDc8+937sh+85Cb8cw+/CMcH6NvHeHcI=="#"0123456789"#
+    key ="ziISjqkXPsGUMRNG".encode() #b"\x7A\x69\x49\x53\x6A\x71\x6B\x58\x50\x73\x47\x55\x4D\x52\x4E\x47\x7B\x46\xE9\xB0\x11\x37\x82\xE8\x41\x44\xC5\xBD\x0C\x16\x8B\xFA"# "ziISjqkXPsGUMRNGyWigxDGtJbfTdcGv"
     iv = "WonrnVkxeIxDcFbv"
 
 
