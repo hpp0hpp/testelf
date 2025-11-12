@@ -444,6 +444,14 @@ def emulate_libcore_function():
                 print(mu.mem_read(read_pointer_from_memory(mu,r2), 112).hex())
                 # 记录 x0和x21
                 return
+            if 0x2D028C == offset:
+                x0 = mu.reg_read(UC_ARM64_REG_X0)
+                print("sbox:",mu.mem_read(x0, 256).hex())
+                # 记录 x0和x21
+                return
+            if offset == 0x2D02B4:
+                log("执行到0x2D02B4")
+                r2
             if offset == 0x61A5C0:
                 size = mu.reg_read(UC_ARM64_REG_X0)
                 # 记录 x0和x21

@@ -68,7 +68,7 @@ def emulate_libcore_function():
         mu = Uc(UC_ARCH_ARM64, UC_MODE_ARM)
         
         # 读取libcore.so文件
-        libcore_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "libcore.bin")
+        libcore_path = 'd:\\crack\\jiongciyuan\\unicorn\\libcore.bin'
         libcore_data = read_libcore_so(libcore_path)
         
         if not libcore_data:
