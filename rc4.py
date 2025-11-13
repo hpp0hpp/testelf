@@ -64,8 +64,19 @@ class RC4:
         """
         keystream = self._prga()
         #print keystream
+        my_bytes=[]
+        for i in plaintext:
+            k=next(keystream)
+            res = i ^ k
+            my_bytes.append(res)
+            print(f'{hex(res)} = {hex(i)} ^ {hex(k)}')
+
+            print('')
+        return bytes(my_bytes)
+
+            
         
-        return bytes([p ^ next(keystream) for p in plaintext])
+        # return bytes([p ^ next(keystream) for p in plaintext])
 
     def decrypt(self, ciphertext: bytes) -> bytes:
         """
